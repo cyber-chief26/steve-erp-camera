@@ -14,18 +14,20 @@ http {
     client_max_body_size 200m;
 
     server {
-        listen ${PORT} default_server;
-        server_name ${HOST};
+        # Render’s default port
+        listen 10000;
+        server_name _;
+
         root /app/public;
 
         location / {
             default_type text/html;
             return 200 '
                 <h2>✅ Steve ERP HLS Server Active</h2>
-                <p>Upload target (handled by Node):</p>
-                <pre>https://${HOST}/upload</pre>
-                <p>Streams available under:</p>
-                <pre>https://${HOST}/hls/reception/reception.m3u8</pre>';
+                <p>Upload target:</p>
+                <pre>https://<your-app-name>.onrender.com/upload/reception/</pre>
+                <p>Stream playback:</p>
+                <pre>https://<your-app-name>.onrender.com/hls/reception/reception.m3u8</pre>';
         }
 
         location /hls {
