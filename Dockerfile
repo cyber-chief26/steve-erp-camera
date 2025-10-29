@@ -1,13 +1,12 @@
-# Dockerfile
 FROM alfg/nginx-rtmp:latest
 
-# Copy config template and startup script
+# Copy template + starter
 COPY nginx.conf.template /etc/nginx/nginx.conf.template
 COPY start.sh /start.sh
 RUN chmod +x /start.sh
 
-# Expose ports (Render ignores these but it's good practice)
-EXPOSE 80 1935
+# Expose web + RTMP (Render detects 1935 as an additional TCP port)
+EXPOSE 10000
+EXPOSE 1935
 
-# Entrypoint
 CMD ["/start.sh"]
