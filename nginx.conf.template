@@ -1,33 +1,58 @@
-# Steve ERP HLS direct relay (no RTMP)
 worker_processes auto;
 events { worker_connections 1024; }
 
 http {
-  server {
-    listen ${PORT};
-    server_name _;
+    include       mime.types;
+    default_type  application/octet-stream;
+    sendfile      on;
+    keepalive_timeout  65;
+    server_tokens off;
 
-    location = / {
-      default_type text/plain;
-      return 200 "✅ Steve ERP HLS relay is active.
+    server {
+        listen ${PORT} default_server;
+        server_name ${HOST};
 
-Push stream example:
-  ffmpeg -f mjpeg -i http://<ip>:8080/video -c:v libx264 -preset ultrafast -f hls -hls_time 2 -hls_list_size 5 -hls_flags delete_segments -hls_segment_filename /tmp/hls/reception/segment_%03d.ts /tmp/hls/reception/reception.m3u8
+        # Root where HLS files are stored
+        root /tmp;
 
-Watch stream:
-  https://${RENDER_EXTERNAL_HOSTNAME}/hls/reception/reception.m3u8
-";
+        # Main index page
+        location / {
+            default_type text/html;
+            return 200 '
+                <h3>✅ Steve ERP HLS relay is live</h3>
+                <p>Push stream example:</p>
+                <pre>ffmpeg -f mjpeg -i http://&lt;ip&gt;:8080/video -c:v libx264 -preset ultrafast -f hls -hls_time 2 -hls_list_size 5 -hls_flags delete_segments -hls_segment_filename segment_%03d.ts reception.m3u8</pre>
+                <p>Upload via:</p>
+                <pre>curl -X PUT -T reception.m3u8 https://${HOST}/hls/reception/reception.m3u8</pre>
+                <p>Watch stream:</p>
+                <pre>https://${HOST}/hls/reception/reception.m3u8</pre>';
+        }
+
+        # Serve and accept uploads for HLS streams
+        location /hls {
+            types {
+                application/vnd.apple.mpegurl m3u8;
+                video/mp2t ts;
+            }
+            add_header Cache-Control no-cache;
+            add_header Access-Control-Allow-Origin *;
+
+            # Directory inside container
+            root /tmp;
+
+            # ✅ Allow PUT uploads
+            limit_except GET {
+                allow all;
+                client_body_temp_path /tmp/hls;
+                client_max_body_size 200m;
+                dav_methods PUT;
+                create_full_put_path on;
+                dav_access group:rw all:r;
+            }
+        }
+
+        # Optional: logs
+        error_log /dev/stderr;
+        access_log /dev/stdout;
     }
-
-    # Serve HLS files
-    location /hls {
-      types {
-        application/vnd.apple.mpegurl m3u8;
-        video/mp2t ts;
-      }
-      root /tmp;
-      add_header Cache-Control no-cache;
-      add_header Access-Control-Allow-Origin *;
-    }
-  }
 }
