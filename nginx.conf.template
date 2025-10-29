@@ -1,4 +1,4 @@
-# Steve ERP Camera Relay — HTTP-FLV + HLS
+# Steve ERP Camera Relay — HTTP ingest + HLS
 worker_processes auto;
 events { worker_connections 1024; }
 
@@ -9,7 +9,7 @@ http {
 
     location = / {
       default_type text/plain;
-      return 200 "✅ Steve ERP HTTP-FLV + HLS relay is active.
+      return 200 "✅ Steve ERP HTTP + HLS relay is active.
 
 Push stream example:
   ffmpeg -f mjpeg -i http://<ip>:8080/video -c:v libx264 -preset ultrafast -f flv http://${RENDER_EXTERNAL_HOSTNAME}/live/reception
@@ -19,15 +19,15 @@ Watch stream:
 ";
     }
 
-    # HTTP-FLV ingest endpoint
+    # Allow POST upload to /live (Render-compatible)
     location /live {
-      flv_live on;
-      chunked_transfer_encoding on;
-      add_header 'Access-Control-Allow-Origin' '*' always;
-      add_header 'Access-Control-Expose-Headers' 'Content-Length';
+      proxy_pass http://127.0.0.1:1935;
+      proxy_buffering off;
+      proxy_request_buffering off;
+      add_header Access-Control-Allow-Origin *;
     }
 
-    # HLS output
+    # Serve HLS outputs
     location /hls {
       types {
         application/vnd.apple.mpegurl m3u8;
@@ -40,15 +40,15 @@ Watch stream:
   }
 }
 
+# RTMP server (internal)
 rtmp {
   server {
-    listen 1935; # optional internal only
+    listen 1935;
     chunk_size 4096;
 
     application live {
       live on;
       record off;
-
       hls on;
       hls_path /tmp/hls;
       hls_fragment 3;
