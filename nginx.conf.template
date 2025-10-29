@@ -8,12 +8,11 @@ http {
     include       mime.types;
     default_type  application/octet-stream;
     sendfile      on;
-    keepalive_timeout  65;
+    keepalive_timeout 65;
     server_tokens off;
 
-    # ✅ Allowed globally instead of inside location
-    client_body_temp_path /tmp/hls;
     client_max_body_size 200m;
+    client_body_temp_path /tmp/hls;
 
     server {
         listen ${PORT} default_server;
@@ -23,32 +22,49 @@ http {
         location / {
             default_type text/html;
             return 200 '
-                <h3>✅ Steve ERP HLS relay is live</h3>
-                <p>Push a stream using:</p>
+                <h2>✅ Steve ERP HLS Relay Active</h2>
+                <p>To push a stream:</p>
                 <pre>ffmpeg -f mjpeg -i http://10.0.0.9:8080/video -c:v libx264 -preset ultrafast -f hls -hls_time 2 -hls_list_size 5 -hls_flags delete_segments -hls_segment_filename segment_%03d.ts reception.m3u8</pre>
-                <p>Upload via:</p>
-                <pre>curl -X PUT -T reception.m3u8 https://${HOST}/hls/reception/reception.m3u8</pre>
-                <p>View stream:</p>
+                <p>Then upload with:</p>
+                <pre>curl -X PUT -T reception.m3u8 https://${HOST}/upload/reception/reception.m3u8</pre>
+                <p>Watch at:</p>
                 <pre>https://${HOST}/hls/reception/reception.m3u8</pre>';
         }
 
-        # ✅ Allow serving + PUT uploads for HLS files
+        # ✅ Serve video segments and playlists
         location /hls {
             types {
                 application/vnd.apple.mpegurl m3u8;
                 video/mp2t ts;
             }
+            root /tmp;
             add_header Cache-Control no-cache;
             add_header Access-Control-Allow-Origin *;
+        }
 
+        # ✅ Simple PUT/POST upload endpoint (works without WebDAV)
+        location /upload {
             root /tmp;
+            add_header Access-Control-Allow-Origin *;
+            add_header Access-Control-Allow-Methods 'GET, POST, PUT, OPTIONS';
+            add_header Access-Control-Allow-Headers 'Content-Type, Authorization';
 
-            # Allow PUT uploads (without client_body_temp_path here)
-            limit_except GET {
-                allow all;
-                dav_methods PUT;
-                create_full_put_path on;
-                dav_access group:rw all:r;
+            # Save uploaded files to /tmp/hls
+            client_body_in_file_only on;
+            client_body_buffer_size 128k;
+            create_full_put_path on;
+
+            content_by_lua_block {
+                local upload_dir = "/tmp" .. ngx.var.uri:gsub("^/upload", "")
+                local src = ngx.var.request_body_file
+                if src then
+                    os.execute("mkdir -p " .. upload_dir:match("(.*/)")
+                        .. " && mv " .. src .. " " .. upload_dir)
+                    ngx.say("✅ Uploaded to " .. upload_dir)
+                else
+                    ngx.status = 400
+                    ngx.say("❌ No file uploaded.")
+                end
             }
         }
 
