@@ -1,34 +1,44 @@
+// server.js — Local HLS uploader for Render integration
+
 import express from "express";
-import multer from "multer";
 import fs from "fs";
+import multer from "multer";
 import path from "path";
 
 const app = express();
 const PORT = process.env.PORT || 10000;
 
-// Custom storage for flexible nested uploads
+// Directory where uploaded files will be stored
+const uploadDir = path.join(process.cwd(), "public", "hls");
+
+// Ensure directories exist
+fs.mkdirSync(uploadDir, { recursive: true });
+
+// Multer storage setup
 const storage = multer.diskStorage({
-  destination: (req, file, cb) => {
-    // Capture everything after /upload/
-    const uploadSubpath = req.params[0] || "";
-    const folder = path.join("/app/public/hls", uploadSubpath);
-    fs.mkdirSync(folder, { recursive: true });
-    cb(null, folder);
-  },
+  destination: (req, file, cb) => cb(null, uploadDir),
   filename: (req, file, cb) => cb(null, file.originalname),
 });
-
 const upload = multer({ storage });
 
-// ✅ Correct wildcard syntax for Express v5+
-app.put("/upload/*", upload.single("file"), (req, res) => {
-  res.send(`✅ Uploaded ${req.file.originalname} to ${req.file.destination}`);
+// ✅ PUT route for single file uploads (e.g., reception.m3u8)
+app.put("/upload/:filename", (req, res) => {
+  const filename = req.params.filename;
+  const filepath = path.join(uploadDir, filename);
+  const writeStream = fs.createWriteStream(filepath);
+
+  req.pipe(writeStream);
+  req.on("end", () => {
+    res.send(`✅ Uploaded ${filename} to ${filepath}`);
+  });
+  req.on("error", (err) => {
+    res.status(500).send(`❌ Upload failed: ${err.message}`);
+  });
 });
 
-// Serve static files
-app.use(express.static("/app/public"));
+// Serve static files (HLS segments and playlists)
+app.use("/hls", express.static(path.join(process.cwd(), "public", "hls")));
 
-// Health check
-app.get("/health", (req, res) => res.send("OK"));
-
-app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
+app.listen(PORT, () => {
+  console.log(`✅ Server running on port ${PORT}`);
+});
