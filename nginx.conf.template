@@ -1,7 +1,4 @@
-# ==========================================
-# Nginx config for RTMP + HLS Relay on Render
-# ==========================================
-
+# /etc/nginx/nginx.conf.template
 worker_processes 1;
 
 events {
@@ -10,7 +7,7 @@ events {
 
 rtmp {
     server {
-        listen 1935;                    # RTMP internal listener
+        listen 1935;
         chunk_size 4096;
 
         application live {
@@ -35,7 +32,6 @@ http {
             add_header Access-Control-Allow-Origin *;
         }
 
-        # Proxy RTMP traffic via HTTPS (Render-compatible)
         location /live {
             proxy_pass http://127.0.0.1:1935;
             proxy_http_version 1.1;
@@ -44,7 +40,7 @@ http {
         }
 
         location / {
-            return 200 "✅ RTMP + HLS relay active on port ${PORT}\n";
+            return 200 "✅ RTMP + HLS relay is active on port ${PORT}\n";
         }
     }
 }
