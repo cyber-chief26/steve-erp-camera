@@ -1,28 +1,33 @@
-# /etc/nginx/nginx.conf.template
+# Steve ERP Camera Relay — HTTP-FLV + HLS
 worker_processes auto;
-
 events { worker_connections 1024; }
 
-# ---------- HTTP (HLS + status) ----------
 http {
   server {
     listen ${PORT};
     server_name _;
 
-    # Status page (shows the right host name Render assigns)
     location = / {
       default_type text/plain;
-      return 200 "✅ Steve ERP Multi-camera RTMP + HLS relay is active.
+      return 200 "✅ Steve ERP HTTP-FLV + HLS relay is active.
 
 Push stream example:
-  ffmpeg -f mjpeg -i http://<ip>:8080/video -c:v libx264 -preset ultrafast -f flv rtmp://${RENDER_EXTERNAL_HOSTNAME}:1935/live/reception
+  ffmpeg -f mjpeg -i http://<ip>:8080/video -c:v libx264 -preset ultrafast -f flv http://${RENDER_EXTERNAL_HOSTNAME}/live/reception
 
 Watch stream:
   https://${RENDER_EXTERNAL_HOSTNAME}/hls/reception/reception.m3u8
 ";
     }
 
-    # Serve HLS outputs
+    # HTTP-FLV ingest endpoint
+    location /live {
+      flv_live on;
+      chunked_transfer_encoding on;
+      add_header 'Access-Control-Allow-Origin' '*' always;
+      add_header 'Access-Control-Expose-Headers' 'Content-Length';
+    }
+
+    # HLS output
     location /hls {
       types {
         application/vnd.apple.mpegurl m3u8;
@@ -35,24 +40,22 @@ Watch stream:
   }
 }
 
-# ---------- RTMP ingest (public TCP:1935) ----------
 rtmp {
   server {
-    listen 1935;               # Render will expose this as an additional TCP port
+    listen 1935; # optional internal only
     chunk_size 4096;
 
     application live {
       live on;
       record off;
 
-      # HLS output
       hls on;
       hls_path /tmp/hls;
       hls_fragment 3;
       hls_playlist_length 20;
       hls_continuous on;
       hls_cleanup off;
-      hls_nested on;           # /tmp/hls/<camera_id>/
+      hls_nested on;
     }
   }
 }
