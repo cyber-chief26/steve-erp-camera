@@ -1,12 +1,20 @@
-FROM alfg/nginx-rtmp:latest
+# Use Node base image for uploads + nginx for serving
+FROM node:20-alpine AS build
 
-# Copy template + starter
-COPY nginx.conf.template /etc/nginx/nginx.conf.template
-COPY start.sh /start.sh
-RUN chmod +x /start.sh
+WORKDIR /app
+COPY package*.json ./
+RUN npm install express multer
 
-# Expose web + RTMP (Render detects 1935 as an additional TCP port)
-EXPOSE 10000
-EXPOSE 1935
+COPY . .
 
-CMD ["/start.sh"]
+# Public HLS directory
+RUN mkdir -p /app/public/hls
+
+# Install nginx
+RUN apk add --no-cache nginx
+
+# Copy nginx template
+COPY nginx.conf.template /etc/nginx/nginx.conf
+
+# Start both Node (for upload) and nginx (for serving)
+CMD nginx && node server.js
