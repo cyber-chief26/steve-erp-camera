@@ -5,72 +5,37 @@ events {
 }
 
 http {
-    include       mime.types;
-    default_type  application/octet-stream;
-    sendfile      on;
+    include mime.types;
+    default_type application/octet-stream;
+    sendfile on;
     keepalive_timeout 65;
     server_tokens off;
 
     client_max_body_size 200m;
-    client_body_temp_path /tmp/hls;
 
     server {
         listen ${PORT} default_server;
         server_name ${HOST};
-        root /tmp;
+        root /app/public;
 
-        # Homepage
         location / {
             default_type text/html;
             return 200 '
-                <h2>✅ Steve ERP HLS Relay Active</h2>
-                <p>To push a stream:</p>
-                <pre>ffmpeg -f mjpeg -i http://10.0.0.9:8080/video -c:v libx264 -preset ultrafast -f hls -hls_time 2 -hls_list_size 5 -hls_flags delete_segments -hls_segment_filename segment_%03d.ts reception.m3u8</pre>
-                <p>Upload with:</p>
-                <pre>curl -X PUT -T reception.m3u8 https://${HOST}/upload/reception/reception.m3u8</pre>
-                <p>View stream at:</p>
+                <h2>✅ Steve ERP HLS Server Active</h2>
+                <p>Upload target (handled by Node):</p>
+                <pre>https://${HOST}/upload</pre>
+                <p>Streams available under:</p>
                 <pre>https://${HOST}/hls/reception/reception.m3u8</pre>';
         }
 
-        # Serve HLS streams
         location /hls {
             types {
                 application/vnd.apple.mpegurl m3u8;
                 video/mp2t ts;
             }
+            root /app/public;
             add_header Cache-Control no-cache;
             add_header Access-Control-Allow-Origin *;
-            root /tmp;
-        }
-
-        # Handle uploads (no WebDAV)
-        location /upload {
-            root /tmp;
-            add_header Access-Control-Allow-Origin *;
-            add_header Access-Control-Allow-Methods 'GET, POST, PUT, OPTIONS';
-            add_header Access-Control-Allow-Headers 'Content-Type, Authorization';
-
-            client_body_in_file_only on;
-            client_body_buffer_size 128k;
-
-            content_by_lua_block {
-                local upload_path = "/tmp" .. ngx.var.uri:gsub("^/upload", "")
-                local temp_file = ngx.var.request_body_file
-                if not temp_file then
-                    ngx.status = 400
-                    ngx.say("❌ No file uploaded.")
-                    return
-                end
-
-                -- Ensure directories exist
-                local dir = upload_path:match("(.*/)")
-                os.execute("mkdir -p " .. dir)
-
-                -- Move uploaded file
-                os.execute("mv " .. temp_file .. " " .. upload_path)
-
-                ngx.say("✅ Uploaded to " .. upload_path)
-            }
         }
 
         error_log /dev/stderr;
