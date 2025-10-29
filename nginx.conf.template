@@ -1,65 +1,58 @@
-worker_processes 1;
+# /etc/nginx/nginx.conf.template
+worker_processes auto;
 
-events {
-    worker_connections 1024;
-}
+events { worker_connections 1024; }
 
-# =========================================================
-#  RTMP SERVER (for ingest)
-# =========================================================
-rtmp {
-    server {
-        listen 1935;
-        chunk_size 4096;
-
-        # Accept any camera key under /live/<camera_id>
-        application live {
-            live on;
-            record off;
-
-            # Use variable path for each camera stream
-            hls on;
-            hls_path /tmp/hls;
-            hls_fragment 3;
-            hls_playlist_length 30;
-            hls_nested on;            # creates /tmp/hls/<camera_id> folders automatically
-            hls_cleanup off;
-
-            # Optional: allow both ffmpeg push and OBS
-            allow publish all;
-            allow play all;
-        }
-    }
-}
-
-# =========================================================
-#  HTTP SERVER (for playback + diagnostics)
-# =========================================================
+# ---------- HTTP (HLS + status) ----------
 http {
-    server {
-        listen ${PORT};
-        server_name _;
+  server {
+    listen ${PORT};
+    server_name _;
 
-        # Serve all generated HLS files
-        location /hls {
-            types {
-                application/vnd.apple.mpegurl m3u8;
-                video/mp2t ts;
-            }
-            root /tmp;
-            add_header Cache-Control no-cache;
-            add_header Access-Control-Allow-Origin *;
-        }
+    # Status page (shows the right host name Render assigns)
+    location = / {
+      default_type text/plain;
+      return 200 "✅ Steve ERP Multi-camera RTMP + HLS relay is active.
 
-        # Optional: simple index for testing
-        location / {
-            default_type text/plain;
-            return 200 "✅ Multi-camera RTMP + HLS relay is active.\n
 Push stream example:
-  ffmpeg -f mjpeg -i http://<ip>:8080/video -c:v libx264 -preset ultrafast -f flv rtmp://${HOSTNAME}:1935/live/reception
+  ffmpeg -f mjpeg -i http://<ip>:8080/video -c:v libx264 -preset ultrafast -f flv rtmp://${RENDER_EXTERNAL_HOSTNAME}:1935/live/reception
+
 Watch stream:
-  https://${HOSTNAME}/hls/reception/reception.m3u8
+  https://${RENDER_EXTERNAL_HOSTNAME}/hls/reception/reception.m3u8
 ";
-        }
     }
+
+    # Serve HLS outputs
+    location /hls {
+      types {
+        application/vnd.apple.mpegurl m3u8;
+        video/mp2t ts;
+      }
+      root /tmp;
+      add_header Cache-Control no-cache;
+      add_header Access-Control-Allow-Origin *;
+    }
+  }
+}
+
+# ---------- RTMP ingest (public TCP:1935) ----------
+rtmp {
+  server {
+    listen 1935;               # Render will expose this as an additional TCP port
+    chunk_size 4096;
+
+    application live {
+      live on;
+      record off;
+
+      # HLS output
+      hls on;
+      hls_path /tmp/hls;
+      hls_fragment 3;
+      hls_playlist_length 20;
+      hls_continuous on;
+      hls_cleanup off;
+      hls_nested on;           # /tmp/hls/<camera_id>/
+    }
+  }
 }
