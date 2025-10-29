@@ -6,23 +6,29 @@ import path from "path";
 const app = express();
 const PORT = process.env.PORT || 10000;
 
-// Save uploads to /app/public/hls/...
+// Custom storage for flexible nested uploads
 const storage = multer.diskStorage({
   destination: (req, file, cb) => {
-    const folder = path.join("/app/public", req.path.replace(/^\/upload/, ""));
+    // Capture everything after /upload/
+    const uploadSubpath = req.params[0] || "";
+    const folder = path.join("/app/public/hls", uploadSubpath);
     fs.mkdirSync(folder, { recursive: true });
     cb(null, folder);
   },
   filename: (req, file, cb) => cb(null, file.originalname),
 });
+
 const upload = multer({ storage });
 
-// Upload endpoint
+// ✅ Correct wildcard syntax for Express v5+
 app.put("/upload/*", upload.single("file"), (req, res) => {
-  res.send(`✅ Uploaded ${req.file.originalname}`);
+  res.send(`✅ Uploaded ${req.file.originalname} to ${req.file.destination}`);
 });
 
-// Serve static files (for nginx proxy)
+// Serve static files
 app.use(express.static("/app/public"));
 
-app.listen(PORT, () => console.log(`Server listening on ${PORT}`));
+// Health check
+app.get("/health", (req, res) => res.send("OK"));
+
+app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
