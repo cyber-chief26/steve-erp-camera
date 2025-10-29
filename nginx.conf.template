@@ -1,33 +1,46 @@
 worker_processes 1;
 
-events { worker_connections 1024; }
+events {
+    worker_connections 1024;
+}
 
+# =========================================================
+#  RTMP SERVER (for ingest)
+# =========================================================
 rtmp {
     server {
         listen 1935;
         chunk_size 4096;
+
+        # Accept any camera key under /live/<camera_id>
         application live {
             live on;
             record off;
+
+            # Use variable path for each camera stream
+            hls on;
+            hls_path /tmp/hls;
+            hls_fragment 3;
+            hls_playlist_length 30;
+            hls_nested on;            # creates /tmp/hls/<camera_id> folders automatically
+            hls_cleanup off;
+
+            # Optional: allow both ffmpeg push and OBS
+            allow publish all;
+            allow play all;
         }
     }
 }
 
+# =========================================================
+#  HTTP SERVER (for playback + diagnostics)
+# =========================================================
 http {
     server {
         listen ${PORT};
         server_name _;
 
-        # Accept incoming HTTP-FLV (FFmpeg can push via HTTP)
-        location /live/reception {
-            client_max_body_size 0;
-            chunked_transfer_encoding on;
-            proxy_pass http://127.0.0.1:1935;
-            proxy_http_version 1.1;
-            proxy_request_buffering off;
-        }
-
-        # Serve HLS
+        # Serve all generated HLS files
         location /hls {
             types {
                 application/vnd.apple.mpegurl m3u8;
@@ -38,8 +51,15 @@ http {
             add_header Access-Control-Allow-Origin *;
         }
 
+        # Optional: simple index for testing
         location / {
-            return 200 "✅ Nginx relay ready on port ${PORT}\n";
+            default_type text/plain;
+            return 200 "✅ Multi-camera RTMP + HLS relay is active.\n
+Push stream example:
+  ffmpeg -f mjpeg -i http://<ip>:8080/video -c:v libx264 -preset ultrafast -f flv rtmp://${HOSTNAME}:1935/live/reception
+Watch stream:
+  https://${HOSTNAME}/hls/reception/reception.m3u8
+";
         }
     }
 }
